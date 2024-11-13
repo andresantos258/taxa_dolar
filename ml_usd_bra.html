@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Machine Learning em JavaScript</title>
+</head>
+<body>
+<h1>Previsão e Análise do USD/BRL</h1>
+<input type="file" id="fileInput" />
+<pre id="output"></pre>
+<canvas id="chart" width="600" height="400"></canvas>
+
+<script>
+document.getElementById('fileInput').addEventListener('change', function(event) {
+    const file = event.target.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        const data = parseCSV(text);
+        const closingPrices = data.map(row => parseFloat(row['Último'].replace(',', '.')));
+        
+        // Regressão Linear
+        const { slope, intercept } = linearRegression(closingPrices);
+        
+        // Previsão com Média Móvel Simples
+        const movingAverage = calculateMovingAverage(closingPrices, 5);
+        
+        // Classificação da Variação
+        const classifications = classifyVariation(data);
+
+        // Exibir Resultados
+        let output = `Regressão Linear: y = ${slope.toFixed(4)}x + ${intercept.toFixed(4)}\n`;
+        output += `Média Móvel (5 períodos): ${movingAverage[movingAverage.length - 1].toFixed(4)}\n`;
+        output += `Classificação Última Variação: ${classifications[classifications.length - 1]}\n`;
+        document.getElementById('output').textContent = output;
+
+        // Plotar Gráfico
+        plotChart(closingPrices, movingAverage);
+    };
+    reader.readAsText(file);
+});
+
+function parseCSV(text) {
+    const lines = text.trim().split('\n');
+    const headers = lines[0].split(';');
+    return lines.slice(1).map(line => {
+        const values = line.split(';');
+        return headers.reduce((obj, header, index) => {
+            obj[header.trim()] = values[index].trim();
+            return obj;
+        }, {});
+    });
+}
+
+// Regressão Linear
+function linearRegression(data) {
+    const n = data.length;
+    const xSum = (n * (n - 1)) / 2;
+    const ySum = data.reduce((a, b) => a + b, 0);
+    const xySum = data.reduce((sum, y, x) => sum + x * y, 0);
+    const xSquaredSum = (n * (n - 1) * (2 * n - 1)) / 6;
+
+    const slope = (n * xySum - xSum * ySum) / (n * xSquaredSum - xSum * xSum);
+    const intercept = (ySum - slope * xSum) / n;
+    return { slope, intercept };
+}
+
+// Média Móvel Simples
+function calculateMovingAverage(data, period) {
+    return data.map((val, index, arr) => {
+        if (index < period - 1) return null;
+        const sum = arr.slice(index - period + 1, index + 1).reduce((a, b) => a + b, 0);
+        return sum / period;
+    });
+}
+
+// Classificação de Variação
+function classifyVariation(data) {
+    return data.map(row => {
+        const variation = parseFloat(row['Var%'].replace(',', '.').replace('%', ''));
+        return variation > 0 ? 'Positiva' : 'Negativa';
+    });
+}
+
+// Plotar Gráfico
+function plotChart(prices, movingAverage) {
+    const ctx = document.getElementById('chart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: prices.map((_, i) => i + 1),
+            datasets: [
+                {
+                    label: 'Preço de Fechamento',
+                    data: prices,
+                    borderColor: 'blue',
+                    fill: false
+                },
+                {
+                    label: 'Média Móvel (5 períodos)',
+                    data: movingAverage,
+                    borderColor: 'red',
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { title: { display: true, text: 'Dias' } },
+                y: { title: { display: true, text: 'Preço' } }
+            }
+        }
+    });
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+</html>
