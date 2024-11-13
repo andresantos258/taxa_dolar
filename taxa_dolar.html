@@ -9,25 +9,23 @@
 <h1>Análise e Previsão de Cotação USD/BRL</h1>
 <pre id="output"></pre>
 <canvas id="chart" width="800" height="400"></canvas>
+<canvas id="regressionChart" width="800" height="400"></canvas>
+<div id="explanation"></div>
 
 <script>
 window.addEventListener('DOMContentLoaded', async function() {
     try {
         console.log('Carregando taxa_dolar.json...');
         const response = await fetch('taxa_dolar.json');
-        if (!response.ok) {
-            throw new Error(`Erro ${response.status} ao carregar o JSON`);
-        }
+        if (!response.ok) throw new Error(`Erro ${response.status} ao carregar o JSON`);
 
         const data = await response.json();
-        if (data.length === 0) {
-            throw new Error('JSON vazio ou mal formatado');
-        }
+        if (data.length === 0) throw new Error('JSON vazio ou mal formatado');
 
         // Inverter a ordem dos dados
         data.reverse(); 
 
-        // Ajustar nomes dos campos de acordo com o JSON
+        // Processamento dos dados
         const processedData = data.map(row => {
             try {
                 return {
@@ -44,39 +42,47 @@ window.addEventListener('DOMContentLoaded', async function() {
             }
         }).filter(row => row !== null);
 
-        console.log('Dados processados:', processedData.slice(0, 5)); // Exibir as 5 primeiras linhas para verificação
-
         const closingPrices = processedData.map(row => row.ultimo);
-        if (closingPrices.some(isNaN)) {
-            throw new Error('Erro ao processar preços de fechamento. Verifique o formato dos dados.');
-        }
+        if (closingPrices.some(isNaN)) throw new Error('Erro ao processar preços de fechamento');
 
         // Regressão Linear
-        const { slope, intercept } = linearRegression(closingPrices);
+        const { slope, intercept, rSquared } = linearRegression(closingPrices);
 
-        // Previsão para o dia seguinte (01/11/2024)
+        // Previsão para o dia seguinte
         const nextDayIndex = closingPrices.length;
         const nextDayPrediction = slope * nextDayIndex + intercept;
 
-        // Previsão com Média Móvel Simples
+        // Média Móvel Simples
         const movingAverage = calculateMovingAverage(closingPrices, 5);
-        const classifications = classifyVariation(processedData);
 
-        // Exibir Resultados
+        // Resultados
         let output = `Regressão Linear: y = ${slope.toFixed(4)}x + ${intercept.toFixed(4)}\n`;
-        output += `Média Móvel (5 períodos): ${movingAverage.filter(v => v !== null).pop()?.toFixed(4)}\n`;
-        output += `Classificação Última Variação: ${classifications[classifications.length - 1]}\n`;
+        output += `R² (Coeficiente de Determinação): ${rSquared.toFixed(4)}\n`;
         output += `Previsão para 01/11/2024: ${nextDayPrediction.toFixed(4)} BRL/USD\n`;
         document.getElementById('output').textContent = output;
-        plotChart(closingPrices, movingAverage);
 
+        plotChart(closingPrices, movingAverage);
+        plotRegressionLine(closingPrices, slope, intercept);
+
+        // Explicação
+        document.getElementById('explanation').innerHTML = `
+            
+            <p><strong>Regressão Linear:</strong> Utilizamos a fórmula da regressão linear simples:</p>
+            <p>y = a + bx</p>
+            <ul>
+                <li>a (intercepto): ${intercept.toFixed(4)}</li>
+                <li>b (inclinação): ${slope.toFixed(4)}</li>
+            </ul>
+            <p>O coeficiente de determinação (R²) indica o quanto a variabilidade dos dados é explicada pelo modelo de regressão:</p>
+            <p>R² = 1 - (SSE / SST)</p>
+        `;
     } catch (error) {
         console.error('Erro ao processar arquivo JSON:', error);
-        alert('Erro ao processar o arquivo JSON. Verifique o console para mais detalhes.');
+        alert('Erro ao processar o arquivo JSON.');
     }
 });
 
-// Regressão Linear
+// Regressão Linear com Cálculo de R²
 function linearRegression(data) {
     const n = data.length;
     const xSum = (n * (n - 1)) / 2;
@@ -86,55 +92,46 @@ function linearRegression(data) {
 
     const slope = (n * xySum - xSum * ySum) / (n * xSquaredSum - xSum * xSum);
     const intercept = (ySum - slope * xSum) / n;
-    return { slope, intercept };
+
+    const yMean = ySum / n;
+    const sst = data.reduce((sum, y) => sum + (y - yMean) ** 2, 0);
+    const sse = data.reduce((sum, y, x) => sum + (y - (slope * x + intercept)) ** 2, 0);
+    const rSquared = 1 - sse / sst;
+
+    return { slope, intercept, rSquared };
 }
 
 // Média Móvel Simples
 function calculateMovingAverage(data, period) {
-    return data.map((val, index, arr) => {
-        if (index < period - 1) return null;
-        const sum = arr.slice(index - period + 1, index + 1).reduce((a, b) => a + b, 0);
-        return sum / period;
+    return data.map((_, i) => {
+        if (i < period - 1) return null;
+        return data.slice(i - period + 1, i + 1).reduce((a, b) => a + b) / period;
     });
 }
 
-// Classificação de Variação
-function classifyVariation(data) {
-    return data.map(row => row.variacao > 0 ? 'Positiva' : 'Negativa');
-}
-
-// Plotar Gráfico
+// Plotar Gráficos
 function plotChart(prices, movingAverage) {
     const ctx = document.getElementById('chart').getContext('2d');
     new Chart(ctx, {
         type: 'line',
-        data: {
-            labels: prices.map((_, i) => i + 1),
-            datasets: [
-                {
-                    label: 'Preço de Fechamento',
-                    data: prices,
-                    borderColor: 'blue',
-                    fill: false
-                },
-                {
-                    label: 'Média Móvel (5 períodos)',
-                    data: movingAverage,
-                    borderColor: 'red',
-                    fill: false
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                x: { title: { display: true, text: 'Dias' } },
-                y: { title: { display: true, text: 'Preço' } }
-            }
-        }
+        data: { labels: prices.map((_, i) => i + 1), datasets: [{ label: 'Fechamento', data: prices, borderColor: 'blue' }, { label: 'Média Móvel', data: movingAverage, borderColor: 'red' }] },
     });
 }
 
+// Gráfico da Reta de Regressão
+function plotRegressionLine(data, slope, intercept) {
+    const canvas = document.getElementById('regressionChart');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const width = canvas.width;
+    const height = canvas.height;
+
+    ctx.beginPath();
+    ctx.moveTo(0, height - intercept);
+    ctx.lineTo(width, height - (slope * data.length + intercept));
+    ctx.strokeStyle = 'green';
+    ctx.stroke();
+}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
