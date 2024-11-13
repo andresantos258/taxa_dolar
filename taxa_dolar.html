@@ -6,11 +6,12 @@
 <title>Análise de Cotação USD/BRL</title>
 </head>
 <body>
-<h1>Análise e Previsão de Cotação USD/BRL</h1>
+
+<div id="explanation"></div>
 <pre id="output"></pre>
 <canvas id="chart" width="800" height="400"></canvas>
 <canvas id="regressionChart" width="800" height="400"></canvas>
-<div id="explanation"></div>
+
 
 <script>
 window.addEventListener('DOMContentLoaded', async function() {
@@ -45,21 +46,98 @@ window.addEventListener('DOMContentLoaded', async function() {
         const closingPrices = processedData.map(row => row.ultimo);
         if (closingPrices.some(isNaN)) throw new Error('Erro ao processar preços de fechamento');
 
-        // Regressão Linear
-        const { slope, intercept, rSquared } = linearRegression(closingPrices);
+// Cálculo da Regressão Linear
+function manualLinearRegression(data) {
+    const n = data.length;
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
 
-        // Previsão para o dia seguinte
-        const nextDayIndex = closingPrices.length;
-        const nextDayPrediction = slope * nextDayIndex + intercept;
+    for (let i = 0; i < n; i++) {
+        const x = i;
+        const y = data[i];
+        sumX += x;
+        sumY += y;
+        sumXY += x * y;
+        sumX2 += x * x;
+    }
 
-        // Média Móvel Simples
-        const movingAverage = calculateMovingAverage(closingPrices, 5);
+    // Inclinação (slope)
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    
+    // Intercepto
+    const intercept = (sumY - slope * sumX) / n;
 
-        // Resultados
-        let output = `Regressão Linear: y = ${slope.toFixed(4)}x + ${intercept.toFixed(4)}\n`;
-        output += `R² (Coeficiente de Determinação): ${rSquared.toFixed(4)}\n`;
-        output += `Previsão para 01/11/2024: ${nextDayPrediction.toFixed(4)} BRL/USD\n`;
-        document.getElementById('output').textContent = output;
+    // Coeficiente de Determinação (R²)
+    const yMean = sumY / n;
+    let ssTotal = 0, ssResidual = 0;
+
+    for (let i = 0; i < n; i++) {
+        const y = data[i];
+        const yPred = slope * i + intercept;
+        ssTotal += (y - yMean) ** 2;
+        ssResidual += (y - yPred) ** 2;
+    }
+
+    const rSquared = 1 - (ssResidual / ssTotal);
+
+    return { slope, intercept, rSquared };
+}
+
+// Cálculo da Média Móvel Simples
+function manualCalculateMovingAverage(data, period) {
+    const movingAverages = [];
+    for (let i = 0; i <= data.length - period; i++) {
+        const windowData = data.slice(i, i + period);
+        const average = windowData.reduce((acc, val) => acc + val, 0) / period;
+        movingAverages.push(average);
+    }
+    return movingAverages;
+}
+
+// Cálculo da Correlação de Pearson
+function calculatePearsonCorrelation(x, y) {
+    const n = x.length;
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+
+    for (let i = 0; i < n; i++) {
+        sumX += x[i];
+        sumY += y[i];
+        sumXY += x[i] * y[i];
+        sumX2 += x[i] * x[i];
+        sumY2 += y[i] * y[i];
+    }
+
+    const numerator = n * sumXY - sumX * sumY;
+    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+
+    return numerator / denominator;
+}
+
+// Uso do cálculo da correlação de Pearson
+const timeIndices = closingPrices.map((_, index) => index);  // Índices de tempo (x)
+const pearsonCorrelation = calculatePearsonCorrelation(timeIndices, closingPrices);
+
+// Uso dos cálculos manuais
+const { slope, intercept, rSquared } = manualLinearRegression(closingPrices);
+const nextDayIndex = closingPrices.length;
+const nextDayPrediction = slope * nextDayIndex + intercept;
+
+const movingAverage = manualCalculateMovingAverage(closingPrices, 5);
+
+
+// Exibir Resultados na Tela
+let output = `Regressão Linear: y = ${slope.toFixed(4)}x + ${intercept.toFixed(4)}\n`;
+output += `R² (Coeficiente de Determinação): ${rSquared.toFixed(4)}\n`;
+output += `Correlação de Pearson: ${pearsonCorrelation.toFixed(4)}\n`; // Exibindo a correlação
+output += `Previsão para 01/11/2024: ${nextDayPrediction.toFixed(4)} BRL/USD\n`;
+output += `Média Móvel Simples (últimos 5 dias): ${movingAverage.pop().toFixed(4)}\n`;
+
+let outputElement = document.getElementById('output');
+outputElement.textContent = output;
+
+outputElement.style.textAlign = 'center';
+outputElement.style.fontSize = '18px'; 
+
+
 
         plotChart(closingPrices, movingAverage);
         plotRegressionLine(closingPrices, slope, intercept);
@@ -67,14 +145,128 @@ window.addEventListener('DOMContentLoaded', async function() {
         // Explicação
         document.getElementById('explanation').innerHTML = `
             
-            <p><strong>Regressão Linear:</strong> Utilizamos a fórmula da regressão linear simples:</p>
-            <p>y = a + bx</p>
-            <ul>
-                <li>a (intercepto): ${intercept.toFixed(4)}</li>
-                <li>b (inclinação): ${slope.toFixed(4)}</li>
-            </ul>
-            <p>O coeficiente de determinação (R²) indica o quanto a variabilidade dos dados é explicada pelo modelo de regressão:</p>
-            <p>R² = 1 - (SSE / SST)</p>
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aula sobre Regressão Linear Simples</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 0;
+            text-align: center;
+        }
+        main {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1, h2 {
+            color: #4CAF50;
+        }
+        p {
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        ul {
+            margin-left: 20px;
+        }
+        code {
+            background-color: #f0f0f0;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .highlight {
+            background-color: #e7f9e7;
+            border-left: 5px solid #4CAF50;
+            margin-bottom: 20px;
+            padding: 10px;
+        }
+        footer {
+            text-align: center;
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px;
+            position: fixed;
+            width: 100%;
+            bottom: 0;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Aula sobre Regressão Linear Simples</h1>
+    </header>
+
+    <main>
+        <h2>1. O que é Regressão Linear Simples?</h2>
+        <p>A <strong>regressão linear simples</strong> é um modelo estatístico usado para entender a relação entre duas variáveis: uma variável dependente e uma variável independente.</p>
+        <ul>
+            <li><strong>Variável Dependente (Y):</strong> É a variável que você quer prever ou explicar. Estamos tentando prever o <strong>preço de fechamento do dólar (USD/BRL)</strong>.</li>
+            <li><strong>Variável Independente (X):</strong> É a variável que você usa para prever a variável dependente. Aqui, usamos o <strong>índice de tempo (dia)</strong> como a variável independente.</li>
+        </ul>
+
+        <h2>2. Como funciona a Regressão Linear?</h2>
+        <p>A ideia da regressão linear é encontrar uma <strong>linha reta</strong> (também chamada de "reta de regressão") que melhor se ajusta aos dados. A fórmula é:</p>
+        <code>y = β₀ + β₁ * x</code>
+        <p>Onde:</p>
+        <ul>
+            <li><strong>y</strong> é o valor previsto (o preço do dólar).</li>
+            <li><strong>x</strong> é o valor da variável independente (o dia).</li>
+            <li><strong>β₀</strong> é o <strong>intercepto</strong> (onde a linha corta o eixo y).</li>
+            <li><strong>β₁</strong> é a <strong>inclinação</strong> da linha (quanto a linha sobe ou desce à medida que x aumenta).</li>
+        </ul>
+        <p>O objetivo é achar os valores de β₀ e β₁ que fazem essa linha se ajustar melhor aos dados reais, minimizando a diferença entre os valores reais e os previstos (erro).</p>
+
+        <h2>3. O que é o Coeficiente de Determinação (R²)?</h2>
+        <p>O <strong>coeficiente de determinação (R²)</strong> é uma métrica que nos diz o quanto da variação da variável dependente pode ser explicada pela variável independente. Ele varia entre <strong>0</strong> e <strong>1</strong>.</p>
+        <ul>
+            <li><strong>R² = 1:</strong> A linha de regressão explica completamente a variação dos dados.</li>
+            <li><strong>R² = 0:</strong> A linha de regressão não consegue explicar nenhuma variação dos dados.</li>
+        </ul>
+        <p>Se tivermos um R² alto, isso significa que o modelo está fazendo boas previsões.</p>
+
+        <h2>4. O que é Correlação de Pearson?</h2>
+        <p>A <strong>correlação de Pearson</strong> mede a força e a direção da relação linear entre duas variáveis. Ela vai de <strong>-1 a 1</strong>.</p>
+        <ul>
+            <li><strong>r = 1:</strong> Correlação positiva perfeita (quando uma variável sobe, a outra também sobe de forma exata).</li>
+            <li><strong>r = -1:</strong> Correlação negativa perfeita (quando uma variável sobe, a outra desce de forma exata).</li>
+            <li><strong>r = 0:</strong> Nenhuma correlação (não há relação linear entre as variáveis).</li>
+        </ul>
+        <p>No seu caso, uma correlação positiva entre o índice de tempo (X) e o preço do dólar (Y) faria sentido, pois o preço do dólar pode ter uma tendência de alta ou baixa com o passar dos dias.</p>
+
+        <h2>5. O Modelo é Supervisionado ou Não Supervisionado?</h2>
+        <p>No seu caso, o modelo é <strong>supervisionado</strong> porque você tem dados rotulados, ou seja, já sabe os preços de fechamento do dólar para cada dia (variável dependente), e usa o índice de tempo (variável independente) para prever os preços.</p>
+
+        <h2>6. Média Móvel Simples</h2>
+        <p>A <strong>média móvel simples</strong> ajuda a suavizar as flutuações diárias e a ver a tendência do mercado de forma mais clara. Ela calcula a média dos preços de fechamento dos últimos <strong>n</strong> dias.</p>
+        <code>média móvel = soma dos preços dos últimos n dias / n</code>
+        <p>Por exemplo, se você pegar os preços dos últimos 5 dias, somá-los e dividir por 5, terá a média móvel.</p>
+
+        <h2>7. Como o Gráfico é Gerado?</h2>
+        <p>O código gera dois gráficos:</p>
+        <ul>
+            <li><strong>Gráfico do Preço de Fechamento e da Média Móvel:</strong> Mostra como o preço do dólar e a média móvel evoluem ao longo dos dias.</li>
+            <li><strong>Gráfico da Linha de Regressão:</strong> Mostra a linha de regressão linear, que é a "melhor linha" que o modelo encontrou para prever os preços futuros.</li>
+        </ul>
+    </main>
+
+    <footer>
+        <p>© 2024 Aula de Regressão Linear Simples</p>
+    </footer>
+</body>
+</html>
+
+
         `;
     } catch (error) {
         console.error('Erro ao processar arquivo JSON:', error);
@@ -123,15 +315,20 @@ function plotRegressionLine(data, slope, intercept) {
     const canvas = document.getElementById('regressionChart');
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const width = canvas.width;
-    const height = canvas.height;
+
+    const xScale = canvas.width / (data.length - 1);
+    const yMin = Math.min(...data);
+    const yMax = Math.max(...data);
+    const yScale = canvas.height / (yMax - yMin);
 
     ctx.beginPath();
-    ctx.moveTo(0, height - intercept);
-    ctx.lineTo(width, height - (slope * data.length + intercept));
+    ctx.moveTo(0, canvas.height - ((slope * 0 + intercept - yMin) * yScale));
+    ctx.lineTo(canvas.width, canvas.height - ((slope * (data.length - 1) + intercept - yMin) * yScale));
     ctx.strokeStyle = 'green';
+    ctx.lineWidth = 2;
     ctx.stroke();
 }
+
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
