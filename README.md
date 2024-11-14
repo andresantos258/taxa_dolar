@@ -13,11 +13,14 @@ Bruno Zolotareff
 - FATEC Mauá - SP
 
 * Dados analisados de 02/01/2006 a 31/10/2024
+* 
 * Arquivo a executar:
   taxa_dolar.html
 
 - Execução em terminal:
 npm i -g http-server
+
+- Execução em terminal:
 http-server
 
 - O algoritmo utilizado neste modelo é a Regressão Linear Simples. 
